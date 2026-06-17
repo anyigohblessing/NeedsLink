@@ -7,7 +7,7 @@ import LandingPage            from './pages/public/LandingPage';
 import BrowseOrphanages       from './pages/public/BrowseOrphanages';
 import OrphanageProfilePublic from './pages/public/OrphanageProfilePublic';
 import { AboutPage, NotFoundPage, UnauthorizedPage } from './pages/public/MiscPages';
-import { LoginPage, RegisterPage, ForgotPasswordPage } from './pages/auth/AuthPages';
+import { LoginPage, RegisterPage, ForgotPasswordPage, VerifyEmailPage } from './pages/auth/AuthPages';
 import DonorDashboard         from './pages/donor/DonorDashboard';
 import { BookmarksPage, ActivityPage } from './pages/donor/DonorPages';
 import { OrphanageDashboard, ManageNeedsPage, PostNeedPage, PostUpdatePage } from './pages/orphanage/OrphanagePages';
@@ -37,6 +37,7 @@ export default function App() {
           <Route path="/login"          element={<LoginPage />} />
           <Route path="/register"       element={<RegisterPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
 
           <Route path="/donor/dashboard" element={<ProtectedRoute roles={['donor']}><DonorDashboard /></ProtectedRoute>} />
           <Route path="/donor/bookmarks" element={<ProtectedRoute roles={['donor']}><BookmarksPage /></ProtectedRoute>} />

@@ -1,11 +1,12 @@
-import { useState } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Heart, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { Input, Alert } from '../../components/ui/index';
 import { Spinner } from '../../components/ui/index';
 import toast from 'react-hot-toast';
+import api from '../../services/api';
 
 const ROLE_DASH = { donor: '/donor/dashboard', orphanage: '/orphanage/dashboard', admin: '/admin/dashboard' };
 
@@ -362,6 +363,60 @@ export function ForgotPasswordPage() {
           </>
         )}
       </motion.div>
+    </div>
+  );
+}
+
+/* ─── Verify Email ─────────────────────────────────────────── */
+export function VerifyEmailPage() {
+  const [searchParams] = useSearchParams();
+  const token = searchParams.get('token');
+  const [status, setStatus] = useState('loading'); // loading, success, error
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    if (!token) {
+      setStatus('error');
+      setMessage('Verification token missing.');
+      return;
+    }
+
+    (async () => {
+      try {
+        const { data } = await api.get('/auth/verify-email', { params: { token } });
+        setStatus('success');
+        setMessage(data.message || 'Email verified successfully. You can now log in.');
+        toast.success('Email verified. You can now log in.');
+      } catch (err) {
+        setStatus('error');
+        setMessage(err.response?.data?.message || 'Verification failed.');
+      }
+    })();
+  }, [token]);
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-ivory px-4">
+      <div className="w-full max-w-md">
+        <div className="card p-8 text-center">
+          {status === 'loading' && <div className="mb-4">Verifying…</div>}
+          {status === 'success' && (
+            <>
+              <div className="text-4xl mb-4">✅</div>
+              <h2 className="font-display text-2xl font-bold text-ink mb-2">Email verified</h2>
+              <p className="text-sm text-ink-muted">{message}</p>
+              <Link to="/login" className="btn-primary mt-6 inline-flex">Go to login</Link>
+            </>
+          )}
+          {status === 'error' && (
+            <>
+              <div className="text-4xl mb-4">⚠️</div>
+              <h2 className="font-display text-2xl font-bold text-ink mb-2">Verification failed</h2>
+              <p className="text-sm text-ink-muted">{message}</p>
+              <Link to="/register" className="btn-primary mt-6 inline-flex">Register again</Link>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

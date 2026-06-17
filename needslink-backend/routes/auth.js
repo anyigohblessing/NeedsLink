@@ -15,6 +15,14 @@ router.post('/login', [
   body('password').notEmpty(),
 ], ctrl.login);
 
+// Secure admin creation (development/support): set ADMIN_SECRET in .env and POST { name, email, password, secret }
+router.post('/create-admin', [
+  body('name').notEmpty(),
+  body('email').isEmail(),
+  body('password').isLength({ min: 8 }),
+  body('secret').notEmpty(),
+], ctrl.createAdmin);
+
 router.get('/verify-email',       ctrl.verifyEmail);
 router.post('/forgot-password',   ctrl.forgotPassword);
 router.post('/reset-password',    ctrl.resetPassword);

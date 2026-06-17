@@ -31,9 +31,10 @@ const register = asyncHandler(async (req, res) => {
   try {
     await conn.beginTransaction();
 
+    // Mark email as verified immediately so users can login without email confirmation
     const [userResult] = await conn.query(
-      'INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)',
-      [name, email, password_hash, role]
+      'INSERT INTO users (name, email, password_hash, role, email_verified) VALUES (?, ?, ?, ?, ?)',
+      [name, email, password_hash, role, 1]
     );
     const user_id = userResult.insertId;
 
@@ -49,21 +50,10 @@ const register = asyncHandler(async (req, res) => {
       await conn.query('INSERT INTO donor_profiles (user_id) VALUES (?)', [user_id]);
     }
 
-    // Email verification token
-    const token      = crypto.randomBytes(32).toString('hex');
-    const expires_at = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    await conn.query(
-      'INSERT INTO email_verifications (user_id, token, expires_at) VALUES (?, ?, ?)',
-      [user_id, token, expires_at]
-    );
-
     await conn.commit();
 
-    const tmpl = emailTemplates.verifyEmail(name, token);
-    await sendMail({ to: email, ...tmpl });
-
     res.status(201).json({
-      message: 'Registration successful. Please check your email to verify your account.',
+      message: 'Registration successful. You can now log in.',
     });
   } catch (err) {
     await conn.rollback();
@@ -86,13 +76,32 @@ const login = asyncHandler(async (req, res) => {
   );
   const user = rows[0];
 
-  if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+  if (!user) {
+    throw createError(401, 'Invalid email or password.');
+  }
+
+  const storedHash = user.password_hash || '';
+  let passwordMatch = false;
+  try {
+    passwordMatch = await bcrypt.compare(password, storedHash);
+  } catch (err) {
+    passwordMatch = false;
+  }
+
+  // Fallback: handle legacy or plain-text stored passwords by upgrading on first successful login.
+  const isLegacyPlainPassword = storedHash && !storedHash.startsWith('$2') && storedHash === password;
+  if (!passwordMatch && isLegacyPlainPassword) {
+    passwordMatch = true;
+    const newHash = await bcrypt.hash(password, 10);
+    await db.query('UPDATE users SET password_hash = ? WHERE user_id = ?', [newHash, user.user_id]);
+  }
+
+  if (!passwordMatch) {
     throw createError(401, 'Invalid email or password.');
   }
 
   if (user.status === 'suspended') throw createError(403, 'Your account has been suspended. Contact support.');
   if (user.status === 'deleted')   throw createError(403, 'Account not found.');
-  if (!user.email_verified)        throw createError(403, 'Please verify your email before logging in.');
 
   const token = signToken(user);
 
@@ -214,4 +223,22 @@ const getMe = asyncHandler(async (req, res) => {
   res.json({ user: { ...user, profile } });
 });
 
-module.exports = { register, login, verifyEmail, forgotPassword, resetPassword, getMe };
+const createAdmin = asyncHandler(async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(422).json({ errors: errors.array() });
+
+  const { name, email, password, secret } = req.body;
+  if (!process.env.ADMIN_SECRET) throw createError(500, 'ADMIN_SECRET not configured on server.');
+  if (secret !== process.env.ADMIN_SECRET) throw createError(403, 'Invalid admin creation secret.');
+
+  const [existing] = await db.query('SELECT user_id FROM users WHERE email = ?', [email]);
+  if (existing.length) throw createError(409, 'An account with that email already exists.');
+
+  const password_hash = await bcrypt.hash(password, 10);
+  await db.query('INSERT INTO users (name, email, password_hash, role, email_verified) VALUES (?, ?, ?, ?, ?)',
+    [name, email, password_hash, 'admin', 1]);
+
+  res.status(201).json({ message: 'Admin user created.' });
+});
+
+module.exports = { register, login, verifyEmail, forgotPassword, resetPassword, getMe, createAdmin };
